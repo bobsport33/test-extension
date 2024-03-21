@@ -17,73 +17,67 @@ define(["jquery", "qlik"], function ($, qlik) {
                 },
             },
         },
+        initialProperties: {
+            qHyperCubeDef: {
+                qDimensions: [],
+                qInitialDataFetch: [
+                    {
+                        qWidth: 10,
+                        qHeight: 100,
+                    },
+                ],
+            },
+        },
         paint: function ($element, layout) {
             var hc = layout.qHyperCube;
 
-            // Generate unique container ID based on extension ID
-            var containerId = "extension-container-" + layout.qInfo.qId;
+            // Generate unique container ID based on extension ID and index
+            var containerId =
+                "extension-container-" +
+                layout.qInfo.qId +
+                "-" +
+                layout.qInfo.qType;
 
             const container = document.getElementById(containerId);
 
             if (!container) {
                 // Create a container for the checkboxes
-                var checkboxContainer = $(
-                    '<div id="' +
-                        containerId +
-                        '" class="checkbox-container"></div>'
-                );
+                var checkboxContainer = $("<div/>", {
+                    id: containerId,
+                    class: "checkbox-container",
+                });
 
                 // Append the checkbox container to the element
                 $element.append(checkboxContainer);
 
                 // Iterate over all rows
-                for (var r = 0; r < hc.qDataPages[0].qMatrix.length; r++) {
-                    // Iterate over all cells within a row
-                    for (
-                        var c = 0;
-                        c < hc.qDataPages[0].qMatrix[r].length;
-                        c++
-                    ) {
-                        // Assuming the first dimension contains the field for checkboxes
-                        if (c === 0) {
-                            var fieldValue =
-                                hc.qDataPages[0].qMatrix[r][c].qText;
-                            var checkboxId =
-                                "checkbox_" + containerId + "_" + r + "_" + c;
+                hc.qDataPages[0].qMatrix.forEach((row, index) => {
+                    const fieldValue = row[0].qText;
+                    const checkboxId = `checkbox_${containerId}_${index}_0`;
 
-                            // Create a checkbox element
-                            var checkbox = $(
-                                '<input type="checkbox" id="' +
-                                    checkboxId +
-                                    '" value="' +
-                                    fieldValue +
-                                    '">'
-                            );
-                            checkboxContainer.append(checkbox);
+                    // Create a checkbox element
+                    var checkbox = $("<input/>", {
+                        type: "checkbox",
+                        id: checkboxId,
+                        value: fieldValue,
+                    });
 
-                            // Create a label for the checkbox
-                            var label = $(
-                                '<label for="' +
-                                    checkboxId +
-                                    '">' +
-                                    fieldValue +
-                                    "</label>"
-                            );
-                            checkboxContainer.append(label);
+                    // Create a label for the checkbox
+                    var label = $("<label/>", {
+                        for: checkboxId,
+                        text: fieldValue,
+                    });
 
-                            // Add line break after each checkbox
-                            checkboxContainer.append("<br>");
-                        }
-                    }
-                }
+                    // Append checkbox and label to the container
+                    checkboxContainer.append(checkbox, label, $("<br/>"));
+                });
 
-                checkboxContainer
-                    .find("input[type='checkbox']")
-                    .on("click", function () {
-                        var checkedCheckboxes = checkboxContainer.find(
-                            "input[type='checkbox']:checked"
-                        );
-                        var selectedValues = checkedCheckboxes
+                checkboxContainer.on(
+                    "click",
+                    "input[type='checkbox']",
+                    function () {
+                        var selectedValues = checkboxContainer
+                            .find("input[type='checkbox']:checked")
                             .map(function () {
                                 return $(this).val();
                             })
@@ -97,7 +91,8 @@ define(["jquery", "qlik"], function ($, qlik) {
 
                         // Make selection
                         app.field(fieldName).selectValues(selectedValues);
-                    });
+                    }
+                );
 
                 // Function to listen for changes to selection state
                 const listener = () => {
@@ -106,39 +101,36 @@ define(["jquery", "qlik"], function ($, qlik) {
                     if (selections.length === 0) {
                         checkboxContainer
                             .find("input[type='checkbox']")
-                            .each(function () {
-                                $(this).prop("checked", false);
-                            });
+                            .prop("checked", false);
                     } else {
-                        selections.forEach((selection) => {
-                            if (
-                                selection.fieldName ===
-                                hc.qDimensionInfo[0].qGroupFieldDefs[0]
-                            ) {
-                                const { selectedValues } = selection;
+                        const selectedValues = selections
+                            .filter(
+                                (selection) =>
+                                    selection.fieldName ===
+                                    hc.qDimensionInfo[0].qGroupFieldDefs[0]
+                            )
+                            .map((selection) => selection.getSelectedValues())
+                            .flat()
+                            .map((value) => value.qName);
 
-                                const values = selectedValues.map(
-                                    (v) => v.qName
+                        checkboxContainer
+                            .find("input[type='checkbox']")
+                            .each(function () {
+                                const checkboxValue = $(this).val();
+                                $(this).prop(
+                                    "checked",
+                                    selectedValues.includes(checkboxValue)
                                 );
-                                checkboxContainer
-                                    .find("input[type='checkbox']")
-                                    .each(function () {
-                                        const checkboxValue = $(this).val();
-
-                                        $(this).prop(
-                                            "checked",
-                                            values.includes(checkboxValue)
-                                        );
-                                    });
-                            }
-                        });
+                            });
                     }
                 };
 
                 // Get the selection state
                 const selectionState = qlik.currApp().selectionState();
+
                 // Listen for changes to selection state
                 selectionState.OnData.bind(listener);
+                selectionState.OnSelectionsApplied.bind(listener);
             }
         },
     };
